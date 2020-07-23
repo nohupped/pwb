@@ -1,8 +1,11 @@
 mod helpers;
-use helpers::{read_from_stdin, parse_params};
+use helpers::parse_params;
+mod interactive;
+use interactive::shell;
 fn main() {
-    let x = parse_params();
-    println!("{:?}", x);
-    read_from_stdin();
-}
+    let mut x = parse_params();
+    if x.interactive {
+        shell::shell(&mut x);
+    }
 
+}
