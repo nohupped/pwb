@@ -98,9 +98,9 @@ impl Command {
 
 pub(crate) fn build_all_commands() {
     let mut tmp_rwlock = ALLCOMMANDS.write().unwrap();
-    tmp_rwlock.push(Command::help_command());
     tmp_rwlock.push(Command::quit_command());
     tmp_rwlock.push(Command::change_db_command());
+    tmp_rwlock.push(Command::help_command());
 
     std::mem::drop(tmp_rwlock);
 }

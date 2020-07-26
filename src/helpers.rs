@@ -3,6 +3,7 @@
 
 use clap::{App, Arg};
 use dirs;
+use std::fs::OpenOptions;
 use toml;
 
 /// Read VERSION from Cargo Package Version
@@ -110,7 +111,7 @@ pub fn generate_default_config(c: &mut Config) {
         let mut section = toml::map::Map::new();
         section.insert("pwb".into(), toml::Value::Table(toml_config));
         println!(
-            "Writing the following to {:?}\n{:?}",
+            "Writing the following to {:?}\n{}",
             &c.conffile,
             toml::to_string(&toml::Value::Table(section.clone())).unwrap()
         );
@@ -120,6 +121,14 @@ pub fn generate_default_config(c: &mut Config) {
         )
         .unwrap();
         println!("Created {:?}", &c.conffile);
+        OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&c.datafile)
+            .unwrap();
+
+        // Todo: Use serde to deserialise and read from the file's metadata to see if it is a valid file.
+        println!("Created empty {:?}. This can be populated in the interactive mode. Check /h when in interactive mode.", &c.datafile);
 
         return;
     }
