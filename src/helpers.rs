@@ -1,6 +1,7 @@
 //! Contains a few helper functions that is used to read the command line arguments, init the program config
 //! and to store the arguments everytime the program is run.
 
+use crate::crypt;
 use clap::{App, Arg};
 use dirs;
 use std::fs::OpenOptions;
@@ -98,6 +99,11 @@ pub fn parse_params() -> Config {
 pub fn generate_default_config(c: &mut Config) {
     // If the conf directory doesn't exist:
     if !std::path::Path::new(&c.confdir).exists() || !std::path::Path::new(&c.conffile).exists() {
+        // Gets username and password
+        let mut creds = crypt::Creds::ask_username_and_password(true);
+        creds.pbkdf2_hash_and_validate();
+        //println!("{}, {}", username.unwrap(), password.unwrap());
+
         // Creates the data directory
         std::fs::create_dir_all(format!(r#"{}/data"#, c.confdir)).unwrap();
         println!("Created {:?}", &c.confdir);
@@ -132,6 +138,7 @@ pub fn generate_default_config(c: &mut Config) {
 
         return;
     }
+    // Else, do nothing
     println!("{:?} exists, remove it to re-init.", c.confdir);
 }
 
