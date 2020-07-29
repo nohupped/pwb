@@ -10,6 +10,7 @@
 - [ ] Save new passwords
 - [ ] Erase clipboard after delay (Display with a fancy spinner)
 - [ ] Interactive mode should have option to change to new pwb db (A command that modifies the toml like update_db_path or something)
+- [ ] Support aes128 = 16 byte key, aes192 = 24, aes256 = 32 byte keys implementations.
 
 ## How encryption is implemented
 
@@ -28,9 +29,10 @@ Crates used: ring = "0.16.15"
 
 Bibliography:
 
-[AES Key schedule](https://en.wikipedia.org/wiki/AES_key_schedule)
-[Key schedule](https://en.wikipedia.org/wiki/Key_schedule)
-[PBKDF2 Hashing](https://en.wikipedia.org/wiki/PBKDF2)
+1. [AES Key schedule](https://en.wikipedia.org/wiki/AES_key_schedule)
+2. [Key schedule](https://en.wikipedia.org/wiki/Key_schedule)
+3. [PBKDF2 Hashing](https://en.wikipedia.org/wiki/PBKDF2)
 
-Todo: Support aes128 = 16 byte key, aes192 = 24, aes256 = 32 byte keys
-Note: Block size always remain 128 bits (16 bytes), so the encryption has to be done in chunks if the password is > 16 bytes.
+Note:
+
+- Block size always remain 128 bits (16 bytes), so the encryption has to be done in chunks if the password is > 16 bytes.
