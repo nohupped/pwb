@@ -1,12 +1,12 @@
 //! Crypt crate has the cryptographic implementation of the struct that we encrypt and store.
-use ring::pbkdf2;
-use rpassword::read_password;
-use std::num::NonZeroU32;
+use chrono::prelude::*;
+use openssl::pkcs5::pbkdf2_hmac;
+use openssl::symm::{encrypt, Cipher, decrypt};
 
-static PBKDF2_ALG: pbkdf2::Algorithm = pbkdf2::PBKDF2_HMAC_SHA256;
+use rpassword::read_password;
 // Length of credential. Using 16 here to use it for the AES128
 const PBKDF2_CREDENTIAL_LEN: usize = 16;
-const PBKDF2_ITERATIONS: u32 = 100;
+const PBKDF2_ITERATIONS: usize = 100;
 type Credential = [u8; PBKDF2_CREDENTIAL_LEN];
 
 /// Creds store the credentials in byte array and in hashed byte array (pbkdf2) format
@@ -17,16 +17,6 @@ pub struct Creds {
     pbkdf2_hash: Vec<u8>,
 }
 
-pub struct Crypt {
-    Meta: CryptMeta,
-}
-
-pub struct CryptMeta {
-    created: String,
-    last_modified: String,
-    decrypted: Vec<u8>,
-}
-
 impl Creds {
     pub fn ask_username_and_password(ask_multi: bool) -> Creds {
         println!("You will be asked to enter a username and password twice that will not be echoed to the terminal.");
@@ -35,38 +25,65 @@ impl Creds {
         Creds {
             username_salt: username.as_bytes().to_vec(),
             password_key: password.as_bytes().to_vec(),
-            pbkdf2_hash: Vec::new()
+            pbkdf2_hash: Vec::new(),
         }
     }
-
-    pub fn pbkdf2_hash_and_validate(&mut self) {
-        // Define a storage to store the credential.
+    /// Run this function to populate the member pbkdf2_hash with the PBKDF2 Hash
+    pub fn generate_pbkdf2(&mut self) {
         let mut to_store: Credential = [0u8; PBKDF2_CREDENTIAL_LEN];
-        
-        pbkdf2::derive(
-            PBKDF2_ALG,
-            NonZeroU32::new(PBKDF2_ITERATIONS).unwrap(),
-            &self.username_salt.as_mut(),
-            &self.password_key.as_mut(),
-            to_store.as_mut(),
-        );
-        self.pbkdf2_hash = to_store.to_vec();
-        println!("{:?}", self.pbkdf2_hash);
-        match pbkdf2::verify(
-            PBKDF2_ALG,
-            NonZeroU32::new(PBKDF2_ITERATIONS).unwrap(),
-            &self.username_salt.as_mut(),
-            &self.password_key.as_mut(),
-            &self.pbkdf2_hash,
+        match pbkdf2_hmac(
+            self.password_key.as_ref(),
+            self.username_salt.as_ref(),
+            PBKDF2_ITERATIONS,
+            openssl::hash::MessageDigest::sha256(),
+            &mut to_store,
         ) {
             Ok(_) => {
-                println!("Hash created and verified..{:?}", &mut self.pbkdf2_hash.to_ascii_lowercase());
-            },
-            Err(e) => {
-                println!("pbkdf2 hash computed, but verification of the hash against the username and password failed with error: {:?}.. Exiting.. ", e);
+                self.pbkdf2_hash = to_store.to_vec();
+                println!("Hash generated");
+            }
+            Err(err) => {
+                println!("Error when generating hash; Error: {:?}", err);
                 std::process::exit(1);
             }
         };
+    }
+}
+
+pub struct Data {
+    Meta: CryptMeta,
+}
+
+pub struct CryptMeta {
+    created_utc: DateTime<Utc>,
+    last_modified: DateTime<Utc>,
+    encrypted_string: Vec<u8>,
+    decrypted_string: String,
+}
+
+impl Data {
+    pub fn new() -> Self {
+        let meta: CryptMeta = CryptMeta {
+            created_utc: Utc::now(),
+            last_modified: Utc::now(),
+            encrypted_string: Vec::new(),
+            decrypted_string: "decrypted_string".to_string(),
+        };
+        Self { Meta: meta }
+    }
+
+    pub fn encrypt_with_pbkdf2(&mut self, creds: Creds) {
+        let cipher = Cipher::aes_128_ecb();
+        let ciphertext = encrypt(
+            cipher,
+            &creds.pbkdf2_hash,
+            None,
+            self.Meta.decrypted_string.as_bytes(),
+        ).unwrap();
+        println!("{:?}", ciphertext);
+        let uncipher= Cipher::aes_128_ecb();
+        let unciphertext = decrypt(uncipher,&creds.pbkdf2_hash, None, &ciphertext).unwrap();
+        println!("{:?}", unciphertext.iter().map(|&c| c as char).collect::<String>());
     }
 }
 

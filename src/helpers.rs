@@ -101,7 +101,9 @@ pub fn generate_default_config(c: &mut Config) {
     if !std::path::Path::new(&c.confdir).exists() || !std::path::Path::new(&c.conffile).exists() {
         // Gets username and password
         let mut creds = crypt::Creds::ask_username_and_password(true);
-        creds.pbkdf2_hash_and_validate();
+        creds.generate_pbkdf2();
+        let mut data = crypt::Data::new();
+        data.encrypt_with_pbkdf2(creds); 
         //println!("{}, {}", username.unwrap(), password.unwrap());
 
         // Creates the data directory
