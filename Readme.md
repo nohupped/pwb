@@ -26,11 +26,14 @@
 - A PBKDF2_HMAC_SHA256 is used to compute a 16 byte long PBKDF2 key using the username as salt and password as key.
 - Use this key to decrypt the struct and read the struct
 
-Crates used: openssl
+### Crates used
 
-Crates considered:
+openssl
+
+### Crates considered
 
 [bincode_aes](https://docs.rs/bincode_aes/1.0.1/bincode_aes/)
+
 [aes_gcm](https://docs.rs/aes-gcm/0.6.0/aes_gcm/)
 
 Openssl was used just for the fun of using it.
@@ -45,4 +48,4 @@ Bibliography:
 
 Note:
 
-- Block size always remain 128 bits (16 bytes), so the encryption has to be done in chunks if the password is > 16 bytes.
+- ~Block size always remain 128 bits (16 bytes), so the encryption has to be done in chunks if the password is > 16 bytes.~ This is not required, as `openssl::symm::{encrypt, Cipher, decrypt}` will take care of chunks for us.
