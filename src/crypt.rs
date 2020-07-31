@@ -6,6 +6,7 @@ use openssl::error::ErrorStack;
 
 use std::io::Write;
 use std::io::Read;
+use std::collections::HashMap;
 
 use rpassword::read_password;
 // Length of credential. Using 16 here to use it for the AES128
@@ -57,9 +58,13 @@ impl Creds {
     }
 }
 
+/// Stores the actual data that will be encrypted and stored.
+/// Warning:: Changing this will break compatibility with older
+/// versions when deserialising.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Data {
     meta: CryptMeta,
+    data: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -78,7 +83,10 @@ impl Data {
             encrypted_string: Vec::new(),
             decrypted_string: "decrypted_string".to_string(),
         };
-        Self { meta }
+        Self { 
+            meta,
+            data: HashMap::new(),
+         }
     }
 
     pub fn encrypt_with_pbkdf2_and_write(&mut self, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) {
@@ -91,7 +99,7 @@ impl Data {
             None,
             &encoded,
         ).unwrap();
-        let mut fd = std::fs::File::create(c.datafile.clone()).unwrap();
+        let mut fd = std::fs::File::create(&c.datafile).unwrap();
         fd.write_all(&ciphertext).unwrap();
         // println!("{:?}", ciphertext.iter().map(|&c| c as char).collect::<String>());
         // let uncipher= CIPHER_256_FUNCTION();
@@ -99,15 +107,15 @@ impl Data {
         // println!("{:?}", unciphertext.iter().map(|&c| c as char).collect::<String>());
     }
     
-    pub fn check_decryption_file(&mut self, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<bool, ErrorStack> {
-        print!("Deserializing from file {:?}...", &c.datafile);
+    pub fn check_decryption_file(&mut self, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<bool, Box<dyn std::error::Error>> {
+        println!("Deserializing from file {:?}...", &c.datafile);
         let mut fd = std::fs::File::open(&c.datafile).unwrap();
         let mut data = Vec::new();
         fd.read_to_end(&mut data).unwrap();
         let uncipher= CIPHER_256_FUNCTION();
         let unciphertext =  decrypt(uncipher,&pbkdf2_hash, None, &data)?;
    
-        let decoded: Self = bincode::deserialize(&unciphertext[..]).unwrap();
+        let decoded: Self = bincode::deserialize(&unciphertext[..])?;
         println!("Trying to read metadata from decrypted file, {:?}", decoded.meta.decrypted_string);
 
         if decoded.meta.decrypted_string == "decrypted_string".to_string() {
@@ -115,7 +123,47 @@ impl Data {
         }
         Ok(false)
     }
+    pub fn get_key(&mut self, key: String, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
+        let mut fd = std::fs::File::open(&c.datafile).unwrap();
+        let mut data = Vec::new();
+        fd.read_to_end(&mut data).unwrap();
+        let uncipher= CIPHER_256_FUNCTION();
+        let unciphertext =  decrypt(uncipher,&pbkdf2_hash, None, &data)?;
+        let decoded: Self = bincode::deserialize(&unciphertext[..])?;
+        println!("{:?}", decoded);
+        return match decoded.data.get(&key) {
+            Some(a) => return Ok(a.to_string()),
+            
+            None => {Ok("".to_string())}
+        }
 
+    }
+
+    pub fn put_key(&mut self, key: String, val: String, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
+        let mut fd = std::fs::File::open(&c.datafile).unwrap();
+        let mut data = Vec::new();
+        fd.read_to_end(&mut data).unwrap();
+        let uncipher= CIPHER_256_FUNCTION();
+        let unciphertext =  decrypt(uncipher,&pbkdf2_hash, None, &data)?;
+        let mut decoded: Self = bincode::deserialize(&unciphertext[..])?;
+        let d = &decoded.data.insert(key, val);
+        match d {
+            Some(x) => {
+                self.encrypt_with_pbkdf2_and_write(pbkdf2_hash, c);
+                println!("Over-written data: {}", x);
+                Ok(x.to_string())
+            }
+            None => {
+                self.encrypt_with_pbkdf2_and_write(pbkdf2_hash, c);
+
+                Ok(format!("Newly written data"))
+
+
+            }
+        }
+            
+
+    }
     
 }
 

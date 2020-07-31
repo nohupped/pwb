@@ -18,5 +18,9 @@ pub(crate) fn print_banner() {
 }
 
 pub(crate) fn prompt_builder(c: &helpers::Config) -> String {
-    format!("{}{} > ", PROMPT, c.datafile)
+    if crate::interactive::commands::PBKDF2_HASH.read().unwrap().len() == 0 {
+    format!("(Locked) {}{} > ", PROMPT, c.datafile)
+    } else {
+        format!("(Unlocked) {}{} > ", PROMPT, c.datafile)
+    }
 }

@@ -102,6 +102,7 @@ pub fn generate_default_config(c: &mut Config) {
         std::fs::create_dir_all(format!(r#"{}/data"#, c.confdir)).unwrap();
         println!("Created {:?}", &c.confdir);
         let mut toml_config = toml::map::Map::new();
+        toml_config.insert("version".into(), VERSION.into());
         toml_config.insert("default_cryptfile".into(), c.datafile.clone().into());
         // This key holds the recently used crypt file locations and can be listed from the interactive mode
         toml_config.insert(

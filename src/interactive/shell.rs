@@ -71,7 +71,7 @@ fn input(mut config: &mut helpers::Config) -> String {
             match x(&mut config, &mut meta) {
                 Some(val) => val,
                 None => {
-                    format!("Received None from the command {:?}. If you think this is a bug, file an issue at https://github.com/nohupped/pwb/issues", ret.trim())         
+                    "".to_string()       
                 }
             }
         }
