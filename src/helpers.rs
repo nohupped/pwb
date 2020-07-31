@@ -4,7 +4,6 @@
 use crate::crypt;
 use clap::{App, Arg};
 use dirs;
-use std::fs::OpenOptions;
 use toml;
 
 /// Read VERSION from Cargo Package Version
@@ -43,7 +42,7 @@ pub fn parse_params() -> Config {
                                 .required(false)
                                 .help("Create default configuration."))
                             .arg(Arg::with_name("dump")
-                                .long("dump")
+                                .long("dump_config")
                                 .required(false)
                                 .help("Dump the current config paths. This is no-op.")).get_matches();
 
@@ -99,13 +98,6 @@ pub fn parse_params() -> Config {
 pub fn generate_default_config(c: &mut Config) {
     // If the conf directory doesn't exist:
     if !std::path::Path::new(&c.confdir).exists() || !std::path::Path::new(&c.conffile).exists() {
-        // Gets username and password
-        let mut creds = crypt::Creds::ask_username_and_password(true);
-        creds.generate_pbkdf2();
-        let mut data = crypt::Data::new();
-        data.encrypt_with_pbkdf2(creds); 
-        //println!("{}, {}", username.unwrap(), password.unwrap());
-
         // Creates the data directory
         std::fs::create_dir_all(format!(r#"{}/data"#, c.confdir)).unwrap();
         println!("Created {:?}", &c.confdir);
@@ -129,14 +121,24 @@ pub fn generate_default_config(c: &mut Config) {
         )
         .unwrap();
         println!("Created {:?}", &c.conffile);
-        OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&c.datafile)
-            .unwrap();
 
-        // Todo: Use serde to deserialise and read from the file's metadata to see if it is a valid file.
-        println!("Created empty {:?}. This can be populated in the interactive mode. Check /h when in interactive mode.", &c.datafile);
+        // Gets username and password
+        let mut creds = crypt::Creds::ask_username_and_password(true);
+        creds.generate_pbkdf2();
+        let mut data = crypt::Data::new();
+        data.encrypt_with_pbkdf2_and_write(&creds, c);
+
+        println!("Created encrypted {:?}. This can be populated in the interactive mode. Check /h when in interactive mode.", &c.datafile);
+        println!("Checking decryption test on file...");
+        if data.check_decryption_file(&creds, c) {
+            println!("decryption succeeded")
+        } else {
+            println!("decryption failed...cleaning up");
+            std::fs::remove_dir_all(&c.confdir).expect(&format!(
+                "Cannot clean {}. Remove it manually..",
+                &c.confdir
+            ));
+        }
 
         return;
     }

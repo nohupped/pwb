@@ -3,10 +3,16 @@ use chrono::prelude::*;
 use openssl::pkcs5::pbkdf2_hmac;
 use openssl::symm::{encrypt, Cipher, decrypt};
 
+use std::io::Write;
+use std::io::Read;
+
 use rpassword::read_password;
 // Length of credential. Using 16 here to use it for the AES128
-const PBKDF2_CREDENTIAL_LEN: usize = 16;
+const PBKDF2_CREDENTIAL_LEN: usize = 32;
 const PBKDF2_ITERATIONS: usize = 100;
+
+const CIPHER_256_FUNCTION: fn () -> Cipher = Cipher::aes_256_ecb;
+
 type Credential = [u8; PBKDF2_CREDENTIAL_LEN];
 
 /// Creds store the credentials in byte array and in hashed byte array (pbkdf2) format
@@ -40,7 +46,7 @@ impl Creds {
         ) {
             Ok(_) => {
                 self.pbkdf2_hash = to_store.to_vec();
-                println!("Hash generated");
+                println!("Hash of length {} generated", self.pbkdf2_hash.len());
             }
             Err(err) => {
                 println!("Error when generating hash; Error: {:?}", err);
@@ -50,10 +56,12 @@ impl Creds {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Data {
-    Meta: CryptMeta,
+    meta: CryptMeta,
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct CryptMeta {
     created_utc: DateTime<Utc>,
     last_modified: DateTime<Utc>,
@@ -69,21 +77,41 @@ impl Data {
             encrypted_string: Vec::new(),
             decrypted_string: "decrypted_string".to_string(),
         };
-        Self { Meta: meta }
+        Self { meta }
     }
 
-    pub fn encrypt_with_pbkdf2(&mut self, creds: Creds) {
-        let cipher = Cipher::aes_128_ecb();
+    pub fn encrypt_with_pbkdf2_and_write(&mut self, creds: &Creds, c: &crate::helpers::Config) {
+        println!("Serializing and encrypting the struct using aes_256_ecb" );
+        let encoded: Vec<u8> = bincode::serialize(&self).unwrap();
+        let cipher = CIPHER_256_FUNCTION();
         let ciphertext = encrypt(
             cipher,
             &creds.pbkdf2_hash,
             None,
-            self.Meta.decrypted_string.as_bytes(),
+            &encoded,
         ).unwrap();
-        println!("{:?}", ciphertext);
-        let uncipher= Cipher::aes_128_ecb();
-        let unciphertext = decrypt(uncipher,&creds.pbkdf2_hash, None, &ciphertext).unwrap();
-        println!("{:?}", unciphertext.iter().map(|&c| c as char).collect::<String>());
+        let mut fd = std::fs::File::create(c.datafile.clone()).unwrap();
+        fd.write_all(&ciphertext).unwrap();
+        // println!("{:?}", ciphertext.iter().map(|&c| c as char).collect::<String>());
+        // let uncipher= CIPHER_256_FUNCTION();
+        // let unciphertext = decrypt(uncipher,&creds.pbkdf2_hash, None, &ciphertext).unwrap();
+        // println!("{:?}", unciphertext.iter().map(|&c| c as char).collect::<String>());
+    }
+    
+    pub fn check_decryption_file(&mut self, creds: &Creds, c: &crate::helpers::Config) -> bool {
+        print!("Deserializing from file {:?}...", &c.datafile);
+        let mut fd = std::fs::File::open(&c.datafile).unwrap();
+        let mut data = Vec::new();
+        fd.read_to_end(&mut data).unwrap();
+        let uncipher= CIPHER_256_FUNCTION();
+        let unciphertext = decrypt(uncipher,&creds.pbkdf2_hash, None, &data).unwrap();
+        let decoded: Self = bincode::deserialize(&unciphertext[..]).unwrap();
+        println!("Trying to read metadata from decrypted file, {:?}", decoded.meta.decrypted_string);
+
+        if decoded.meta.decrypted_string == "decrypted_string".to_string() {
+            return true;
+        }
+        false
     }
 }
 
