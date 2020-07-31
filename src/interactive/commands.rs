@@ -69,10 +69,10 @@ impl Command {
     }
 
     // Used to change to a different password db. The file (at least an empty one) and path must exist.
-    pub(crate) fn change_db_command() -> Self {
+    pub(crate) fn select_command() -> Self {
         Command {
-            name: "/changedb",
-            description: "Change to another pwb encrypted file. Usage: /changedb /tmp/newdb.pwb",
+            name: "/select",
+            description: "Selects a pwb encrypted file. Usage: /changedb /tmp/newdb.pwb. Note: This will not open the DB, just selects it.",
             action: |c, meta| {
                 if let Some(p) = meta.params {
                     let file_metadata = metadata(p[0].trim());
@@ -94,13 +94,25 @@ impl Command {
             },
         }
     }
+    // Open command. Todo: work on it
+    pub(crate) fn open_command() -> Self {
+        Command {
+            name: "/open",
+            description: "Opens the currently selected password db. If it is an empty file, it will ask to create a master key. If not, it will ask to enter the master key to unlock.",
+            action: |c, meta| {
+                println!(r#"Quitting on {:?}"#, meta.command.unwrap().trim());
+                std::process::exit(1)
+            },
+        }
+    }
 }
 
 pub(crate) fn build_all_commands() {
     let mut tmp_rwlock = ALLCOMMANDS.write().unwrap();
-    tmp_rwlock.push(Command::help_command());
     tmp_rwlock.push(Command::quit_command());
-    tmp_rwlock.push(Command::change_db_command());
+    tmp_rwlock.push(Command::select_command());
+    tmp_rwlock.push(Command::open_command());
+    tmp_rwlock.push(Command::help_command());
 
     std::mem::drop(tmp_rwlock);
 }

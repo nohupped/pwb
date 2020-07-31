@@ -1,6 +1,7 @@
 //! Contains a few helper functions that is used to read the command line arguments, init the program config
 //! and to store the arguments everytime the program is run.
 
+use crate::crypt;
 use clap::{App, Arg};
 use dirs;
 use toml;
@@ -41,7 +42,7 @@ pub fn parse_params() -> Config {
                                 .required(false)
                                 .help("Create default configuration."))
                             .arg(Arg::with_name("dump")
-                                .long("dump")
+                                .long("dump_config")
                                 .required(false)
                                 .help("Dump the current config paths. This is no-op.")).get_matches();
 
@@ -110,7 +111,7 @@ pub fn generate_default_config(c: &mut Config) {
         let mut section = toml::map::Map::new();
         section.insert("pwb".into(), toml::Value::Table(toml_config));
         println!(
-            "Writing the following to {:?}\n{:?}",
+            "Writing the following to {:?}\n{}",
             &c.conffile,
             toml::to_string(&toml::Value::Table(section.clone())).unwrap()
         );
@@ -121,8 +122,27 @@ pub fn generate_default_config(c: &mut Config) {
         .unwrap();
         println!("Created {:?}", &c.conffile);
 
+        // Gets username and password
+        let mut creds = crypt::Creds::ask_username_and_password(true);
+        creds.generate_pbkdf2();
+        let mut data = crypt::Data::new();
+        data.encrypt_with_pbkdf2_and_write(&creds, c);
+
+        println!("Created encrypted {:?}. This can be populated in the interactive mode. Check /h when in interactive mode.", &c.datafile);
+        println!("Checking decryption test on file...");
+        if data.check_decryption_file(&creds, c) {
+            println!("decryption succeeded")
+        } else {
+            println!("decryption failed...cleaning up");
+            std::fs::remove_dir_all(&c.confdir).expect(&format!(
+                "Cannot clean {}. Remove it manually..",
+                &c.confdir
+            ));
+        }
+
         return;
     }
+    // Else, do nothing
     println!("{:?} exists, remove it to re-init.", c.confdir);
 }
 
