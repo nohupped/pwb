@@ -71,8 +71,7 @@ fn input(mut config: &mut helpers::Config) -> String {
             match x(&mut config, &mut meta) {
                 Some(val) => val,
                 None => {
-                    println!("Quitting on the command {:?}. If you think this is a bug, file an issue at https://github.com/nohupped/pwb/issues", ret.trim());
-                    std::process::exit(1)
+                    format!("Received None from the command {:?}. If you think this is a bug, file an issue at https://github.com/nohupped/pwb/issues", ret.trim())         
                 }
             }
         }

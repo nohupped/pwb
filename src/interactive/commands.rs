@@ -17,6 +17,8 @@ lazy_static::lazy_static! {
     /// build_all_commands() function.
     #[derive(Debug, Copy, Clone)]
     pub(crate) static ref ALLCOMMANDS: RwLock<Vec<Command>> =  RwLock::new(Vec::new());
+    pub(crate) static ref PBKDF2_HASH: RwLock<Vec<u8>> =  RwLock::new(Vec::new());
+
 
 }
 
@@ -72,7 +74,7 @@ impl Command {
     pub(crate) fn select_command() -> Self {
         Command {
             name: "/select",
-            description: "Selects a pwb encrypted file. Usage: /changedb /tmp/newdb.pwb. Note: This will not open the DB, just selects it.",
+            description: "Selects an existing pwb encrypted file. Usage: /changedb /tmp/newdb.pwb. Note: This will not unlock the DB, just selects it.",
             action: |c, meta| {
                 if let Some(p) = meta.params {
                     let file_metadata = metadata(p[0].trim());
@@ -94,16 +96,66 @@ impl Command {
             },
         }
     }
-    // Open command. Todo: work on it
-    pub(crate) fn open_command() -> Self {
+
+    pub(crate) fn unlock_command() -> Self {
         Command {
-            name: "/open",
-            description: "Opens the currently selected password db. If it is an empty file, it will ask to create a master key. If not, it will ask to enter the master key to unlock.",
-            action: |c, meta| {
-                println!(r#"Quitting on {:?}"#, meta.command.unwrap().trim());
-                std::process::exit(1)
+            name: "/unlock",
+            description:
+                "Unlocks the currently selected encrypted password db with a username and password.",
+            action: |c, _| {
+                // match _unlock(&c) {
+                //     Ok(_) => {},
+                //     Err(e) => println!("{:?}", e),
+                // };
+                _unlock(c);
+
+                return Some("".to_string());
             },
         }
+    }
+}
+
+fn _unlock(c: &Config) {
+
+    let hash_length = PBKDF2_HASH.read().unwrap().len();
+    let mut creds: crate::crypt::Creds;
+    if hash_length == 0 {        
+    creds = crate::crypt::Creds::ask_username_and_password(false);
+    creds.generate_pbkdf2();
+    let mut tmp_rwlock = PBKDF2_HASH.write().unwrap();
+    tmp_rwlock.append(&mut creds.pbkdf2_hash);
+    println!("{}", tmp_rwlock.len());
+    }
+    let mut data = crate::crypt::Data::new();
+    let hash = &PBKDF2_HASH.read().unwrap().to_vec();
+    if data.check_decryption_file(&hash, c).unwrap() {
+        println!("Unlocking {:?} succeeded", &c.datafile);
+    } else {
+        println!("Unlocking {:?} failed. Check your username and password.", c.datafile);
+    }
+
+}
+
+/// Unlock error when the db unlock fails
+#[derive(Debug)]
+struct CommandError {
+    details: String,
+}
+impl CommandError {
+    fn new(msg: &str) -> Self {
+        Self {
+            details: msg.to_string(),
+        }
+    }
+}
+impl std::fmt::Display for CommandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.details)
+    }
+}
+impl std::error::Error for CommandError {
+    fn description(&self) -> &str {
+        &self.details
     }
 }
 
@@ -111,7 +163,7 @@ pub(crate) fn build_all_commands() {
     let mut tmp_rwlock = ALLCOMMANDS.write().unwrap();
     tmp_rwlock.push(Command::quit_command());
     tmp_rwlock.push(Command::select_command());
-    tmp_rwlock.push(Command::open_command());
+    tmp_rwlock.push(Command::unlock_command());
     tmp_rwlock.push(Command::help_command());
 
     std::mem::drop(tmp_rwlock);

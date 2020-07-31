@@ -13,7 +13,7 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub fn parse_params() -> Config {
     let matches = App::new("The Encrypted Password Bank")
                             .version(VERSION)
-                            .author("https://github.com/nohupped")
+                            .author("https://github.com/nohupped/pwb")
                             .about("Stores your passwords in an encrypted file that can be retrieved with a master password")
                             .arg(Arg::with_name("get")
                                 .short("g")
@@ -126,11 +126,17 @@ pub fn generate_default_config(c: &mut Config) {
         let mut creds = crypt::Creds::ask_username_and_password(true);
         creds.generate_pbkdf2();
         let mut data = crypt::Data::new();
-        data.encrypt_with_pbkdf2_and_write(&creds, c);
+        data.encrypt_with_pbkdf2_and_write(&creds.pbkdf2_hash, c);
 
         println!("Created encrypted {:?}. This can be populated in the interactive mode. Check /h when in interactive mode.", &c.datafile);
         println!("Checking decryption test on file...");
-        if data.check_decryption_file(&creds, c) {
+        if match data.check_decryption_file(&creds.pbkdf2_hash, c) {
+            Ok(a) => a,
+            Err(e) => {
+                println!("{:?}", e);
+                false
+            },
+        } {
             println!("decryption succeeded")
         } else {
             println!("decryption failed...cleaning up");
