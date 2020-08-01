@@ -1,4 +1,8 @@
-# A rust personal password bank to store passwords, locked with a username/password
+# A rust personal password bank to store passwords, locked with a username and password
+
+One tool to store it all.. One tool to lose it too..
+
+This is a personal tool written as a part of a personal project to learn and explore Rust. There are many places that can definitely be improved or can use some good Rust practices.
 
 ## Features
 
@@ -11,39 +15,55 @@
 - [x] Save new passwords
 - [x] Use `PBKDF2_HMAC` to generate a Hash using Username and Password
 - [x] Use aes256 to encrypt the data.
-- [ ] Commandline parameters to get and put passwords to the password store
-- [ ] Capture password to clipbpard when not in interactive mode (controlled via the config file or env var).
-- [ ] Erase clipboard after delay (If a clipboard manager is being used, it is out of scope)
-- [ ] Interactive mode should have option to change to new pwb db (A command that modifies the toml like update_db_path or something)
-- [ ] Support aes128 = 16 byte key, aes192 = 24, aes256 = 32 byte keys implementations.
+- [x] Commandline parameters to get and put passwords to the password store
+- [x] Interactive mode to support option to change to another pwb db without quitting
+- [ ] Write test cases
 
 ## How encryption is implemented
 
 - User will be asked to input a username and password.
-- A PBKDF2_HMAC_SHA256 is used to compute a 256 byte PBKDF2 key. The first 32 bytes is used as the aes key and the last 16 bytes as the AES IV.
+- PBKDF2_HMAC_SHA256 algorithm in the [Openssl](https://docs.rs/openssl/0.10.30/openssl/) crate is used to produce a digest of 256 bytes of which the first 32 bytes is used as the AES key and the last 16 bytes as the AES IV.
 - Use this key and IV to encrypt the data into an AES CBC standard
 - Use serde to serialise this and store into disk.
 
-### Crates used
+## Usage
 
-openssl
+- use `--init` to initialize the config and encrypted password store. It will prompt you to enter a username / password twice that will not be echoed.
 
-### Crates considered
+### Interactive shell
 
-[bincode_aes](https://docs.rs/bincode_aes/1.0.1/bincode_aes/)
+- use `--help` to see how to invoke the interactive shell.
+- Once in shell, it automatically `select` the db based on environment variable or the config file.
+- run `/unlock` to unlock the encrypted DB. This will prompt you to enter a username and password.
+- A 32 byte long hash and a 16 byte long IV is generated, and will be stored in a `lazy_static` global.
+- This will be used to try to decrypt the db, deserialize it and evaluate a pre-coded string. (This may not be required because de-serialising at the next step will return an error if it wasn't able to.)
+- Each operation on the DB during that session will use the global Hash and IV to decrypt and deserialize and viceversa.
+- `/select` to another DB will clear these globals.
 
-[aes_gcm](https://docs.rs/aes-gcm/0.6.0/aes_gcm/)
+### Dependencies
 
-Openssl was used just for the fun of using it.
+- C compiler
+- perl
+- make
+
+because the `vendored` cargo feature in the dependent [openssl](https://docs.rs/openssl/0.10.30/openssl/) crate is enabled.
+
+Quoting from the crate documentation:
+
+If the vendored Cargo feature is enabled, the openssl-src crate will be used to compile and statically link to a copy of OpenSSL. The build process requires a C compiler, perl, and make. The OpenSSL version will generally track the newest OpenSSL release, and changes to the version are not considered breaking changes.
+
+```toml
+[dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+```
 
 Bibliography:
 
 1. [AES Key schedule](https://en.wikipedia.org/wiki/AES_key_schedule)
 2. [Key schedule](https://en.wikipedia.org/wiki/Key_schedule)
 3. [PBKDF2 Hashing](https://en.wikipedia.org/wiki/PBKDF2)
-4. [Ref on how AesKey is used](https://durch.github.io/rust-jwt/openssl/symm/index.html)
-5. [List of AES implementation that doesn't need a salt](https://crypto.stackexchange.com/questions/66856/in-which-cases-aes-doesnt-need-iv)
+4. [Ref on how AesKey is used](https://docs.rs/openssl/0.10.30/openssl/symm/index.html)
 
 Note:
 
-- ~Block size always remain 128 bits (16 bytes), so the encryption has to be done in chunks if the password is > 16 bytes.~ This is not required, as `openssl::symm::{encrypt, Cipher, decrypt}` will take care of chunks for us.
+- ~Block size always remain 128 bits (16 bytes), so the encryption has to be done in chunks if the password is > 16 bytes.~ This is not required, as `openssl::symm::{encrypt, Cipher, decrypt}` will take care of the chunks.

@@ -18,12 +18,16 @@ pub fn parse_params() -> Config {
                             .arg(Arg::with_name("get")
                                 .short("g")
                                 .long("get")
-                                .value_name("eg:  -g bank_password")
                                 .help("get a stored password associated with a key."))
+                            .arg(Arg::with_name("allkeys")
+                                .short("a")
+                                .long("allkeys")
+                                .required(false)
+                                .help("forgot what the keyname was? Run this to get a clue on what keys you stored your passwords."))
                             .arg(Arg::with_name("put")
                                 .short("p")
                                 .long("put")
-                                .value_name("eg:  -p server '!@355RRt'")
+                                .value_name("server '!@355RRt'")
                                 .number_of_values(2)
                                 .help("Puts a password into the password db associated with a key."))
                             .arg(Arg::with_name("interactive")
@@ -95,6 +99,7 @@ pub fn parse_params() -> Config {
         println!("{}", key);
         std::process::exit(0)
     }
+    // Arg parsing for action get ends here
 
     // Args parsing and action for put 
     if matches.is_present("put") {
@@ -118,6 +123,26 @@ pub fn parse_params() -> Config {
             },
         };
     }
+    // Arg parsing for put ends here
+
+    // Arg parsing for allkeys
+    if matches.is_present("allkeys") {
+        let mut creds = crate::crypt::Creds::ask_username_and_password(false);
+        creds.generate_pbkdf2();
+        let key = match crate::crypt::Data::get_all_keys(
+            &creds.pbkdf2_hash.to_vec(),
+            &creds.aes_iv.to_vec(),
+            &config,
+        ) {
+            Ok(a) => a,
+            Err(e) => {
+                println!("Get encountered error. Error is: {:?}", e);
+                std::process::exit(1)
+            }
+        };
+        println!("{}", key);
+        std::process::exit(0)
+    }
 
     if config.init {
         generate_default_config(&mut config);
@@ -137,11 +162,6 @@ pub fn generate_default_config(c: &mut Config) {
         let mut toml_config = toml::map::Map::new();
         toml_config.insert("version".into(), VERSION.into());
         toml_config.insert("default_cryptfile".into(), c.datafile.clone().into());
-        // This key holds the recently used crypt file locations and can be listed from the interactive mode
-        toml_config.insert(
-            "recent_crypt_files".into(),
-            toml::Value::Array(vec![c.datafile.clone().into()]),
-        );
         let mut section = toml::map::Map::new();
         section.insert("pwb".into(), toml::Value::Table(toml_config));
         println!(
