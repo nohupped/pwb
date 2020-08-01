@@ -133,7 +133,7 @@ impl Data {
         Ok(false)
     }
     pub fn get_key(key: String, pbkdf2_hash: &Vec<u8>, aes_iv: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
-        let mut fd = std::fs::File::open(&c.datafile).unwrap();
+        let mut fd = std::fs::File::open(&c.datafile)?;
         let mut data = Vec::new();
         fd.read_to_end(&mut data).unwrap();
         let decipher= CIPHER_256_FUNCTION();
@@ -175,6 +175,21 @@ impl Data {
         let deciphertext =  decrypt(decipher,&pbkdf2_hash, Some(aes_iv), &data)?;
         let decoded: Self = bincode::deserialize(&deciphertext[..])?;
         return Ok(format!("{:?}",decoded));
+
+    }
+
+    pub fn get_all_keys(pbkdf2_hash: &Vec<u8>, aes_iv: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
+        let mut fd = std::fs::File::open(&c.datafile).unwrap();
+        let mut data = Vec::new();
+        fd.read_to_end(&mut data).unwrap();
+        let decipher= CIPHER_256_FUNCTION();
+        let deciphertext =  decrypt(decipher,&pbkdf2_hash, Some(aes_iv), &data)?;
+        let decoded: Self = bincode::deserialize(&deciphertext[..])?;
+        let mut keys: Vec<String> = Vec::new();
+        for key in decoded.data.keys() {
+            keys.push(key.to_owned())
+        }
+        return Ok(format!("{}",keys.join(", ")));
 
     }
     
