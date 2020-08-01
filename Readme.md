@@ -1,4 +1,6 @@
-# A rust personal password bank to store passwords, locked with a username and password
+# PWB
+
+A rust personal password bank to store all the passwords, locked with one username and password
 
 One tool to store it all.. One tool to lose it too..
 
