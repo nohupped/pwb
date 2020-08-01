@@ -18,6 +18,7 @@ pub fn parse_params() -> Config {
                             .arg(Arg::with_name("get")
                                 .short("g")
                                 .long("get")
+                                .number_of_values(1)
                                 .help("get a stored password associated with a key."))
                             .arg(Arg::with_name("allkeys")
                                 .short("a")
@@ -82,10 +83,17 @@ pub fn parse_params() -> Config {
     config.conffile = format!(r#"{}/config.toml"#, &config.confdir);
     // Args parsing and action for get
     if matches.is_present("get") {
+        let mut params_iter = match matches.values_of("get") {
+            Some(a) => a,
+            None => {
+                println!("Received None value from parsing parameters. Check --help for usage.");
+                std::process::exit(1)
+            },
+        };
         let mut creds = crate::crypt::Creds::ask_username_and_password(false);
         creds.generate_pbkdf2();
         let key = match crate::crypt::Data::get_key(
-            matches.value_of("get").unwrap_or("").to_string(),
+            params_iter.next().unwrap().to_string(),
             &creds.pbkdf2_hash.to_vec(),
             &creds.aes_iv.to_vec(),
             &config,
