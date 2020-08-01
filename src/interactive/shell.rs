@@ -1,8 +1,5 @@
 //! shell contains the minimal interactive shell that the user gets, to interact with
 //! this program. From an end user, use /h to view all subcommands.
-//! Commands supported:
-
-// TODO:
 
 use crate::{
     helpers,

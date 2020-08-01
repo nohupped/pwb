@@ -18,14 +18,18 @@ pub fn parse_params() -> Config {
                             .arg(Arg::with_name("get")
                                 .short("g")
                                 .long("get")
-                                .value_name("eg:  -g bank:bank_password")
-                                .help("get a stored password from a section. Erases itself from clipbpard after 15 seconds unless delay is called."))
-                            .arg(Arg::with_name("delay")
-                                .short("d")
-                                .long("delay")
-                                .env("PWB_DELAY")
-                                .value_name("15")
-                                .help("delay in seconds"))
+                                .help("get a stored password associated with a key."))
+                            .arg(Arg::with_name("allkeys")
+                                .short("a")
+                                .long("allkeys")
+                                .required(false)
+                                .help("forgot what the keyname was? Run this to get a clue on what keys you stored your passwords."))
+                            .arg(Arg::with_name("put")
+                                .short("p")
+                                .long("put")
+                                .value_name("server '!@355RRt'")
+                                .number_of_values(2)
+                                .help("Puts a password into the password db associated with a key."))
                             .arg(Arg::with_name("interactive")
                                 .short("i")
                                 .long("interactive")
@@ -62,13 +66,6 @@ pub fn parse_params() -> Config {
 
         dump: matches.is_present("dump"),
 
-        delay: matches
-            .value_of("delay")
-            .unwrap_or("15")
-            .to_string()
-            .parse::<i64>()
-            .unwrap(),
-
         confdir: if matches.is_present("confdir") {
             format!(r#"{}"#, matches.value_of("confdir").unwrap().to_string())
         } else {
@@ -80,11 +77,72 @@ pub fn parse_params() -> Config {
 
         conffile: "".to_string(),
         datafile: "".to_string(),
-        get: matches.value_of("get").unwrap_or("").to_string(),
     };
-
     config.datafile = format!(r#"{}/data/data.pwb"#, &config.confdir);
     config.conffile = format!(r#"{}/config.toml"#, &config.confdir);
+    // Args parsing and action for get
+    if matches.is_present("get") {
+        let mut creds = crate::crypt::Creds::ask_username_and_password(false);
+        creds.generate_pbkdf2();
+        let key = match crate::crypt::Data::get_key(
+            matches.value_of("get").unwrap_or("").to_string(),
+            &creds.pbkdf2_hash.to_vec(),
+            &creds.aes_iv.to_vec(),
+            &config,
+        ) {
+            Ok(a) => a,
+            Err(e) => {
+                println!("Get encountered error. Error is: {:?}", e);
+                std::process::exit(1)
+            }
+        };
+        println!("{}", key);
+        std::process::exit(0)
+    }
+    // Arg parsing for action get ends here
+
+    // Args parsing and action for put 
+    if matches.is_present("put") {
+        let mut params_iter = match matches.values_of("put") {
+            Some(a) => a,
+            None => {
+                println!("Received None value from parsing parameters. Check --help for usage.");
+                std::process::exit(1)
+            },
+        };
+        let mut creds = crate::crypt::Creds::ask_username_and_password(false);
+        creds.generate_pbkdf2();
+        match crate::crypt::Data::put_key(params_iter.next().unwrap().to_string(), params_iter.next().unwrap().to_string(), &creds.pbkdf2_hash, &creds.aes_iv, &config) {
+            Ok(a) => {
+                println!("{}", a);
+                std::process::exit(0)
+            },
+            Err(e) => {
+                println!("Error putting data into the datastore, {:?}", e);
+                std::process::exit(1)
+            },
+        };
+    }
+    // Arg parsing for put ends here
+
+    // Arg parsing for allkeys
+    if matches.is_present("allkeys") {
+        let mut creds = crate::crypt::Creds::ask_username_and_password(false);
+        creds.generate_pbkdf2();
+        let key = match crate::crypt::Data::get_all_keys(
+            &creds.pbkdf2_hash.to_vec(),
+            &creds.aes_iv.to_vec(),
+            &config,
+        ) {
+            Ok(a) => a,
+            Err(e) => {
+                println!("Get encountered error. Error is: {:?}", e);
+                std::process::exit(1)
+            }
+        };
+        println!("{}", key);
+        std::process::exit(0)
+    }
 
     if config.init {
         generate_default_config(&mut config);
@@ -104,11 +162,6 @@ pub fn generate_default_config(c: &mut Config) {
         let mut toml_config = toml::map::Map::new();
         toml_config.insert("version".into(), VERSION.into());
         toml_config.insert("default_cryptfile".into(), c.datafile.clone().into());
-        // This key holds the recently used crypt file locations and can be listed from the interactive mode
-        toml_config.insert(
-            "recent_crypt_files".into(),
-            toml::Value::Array(vec![c.datafile.clone().into()]),
-        );
         let mut section = toml::map::Map::new();
         section.insert("pwb".into(), toml::Value::Table(toml_config));
         println!(
@@ -135,17 +188,17 @@ pub fn generate_default_config(c: &mut Config) {
                     "Cannot clean {}. Remove it manually..",
                     &c.confdir
                 ));
-            },
+            }
         };
 
         println!("Created encrypted {:?}. This can be populated in the interactive mode. Check /h when in interactive mode.", &c.datafile);
         println!("Checking decryption test on file...");
-        if match data.check_decryption_file(&creds.pbkdf2_hash,  &creds.aes_iv, c) {
+        if match data.check_decryption_file(&creds.pbkdf2_hash, &creds.aes_iv, c) {
             Ok(a) => a,
             Err(e) => {
                 println!("{:?}", e);
                 false
-            },
+            }
         } {
             println!("decryption succeeded")
         } else {
@@ -175,9 +228,6 @@ pub struct Config {
     pub init: bool,
     /// dump is a flag. This just prints the current config this program is using.
     pub dump: bool,
-    /// delay is used to decide how many seconds the copied password has to stay in the clipboard.
-    /// If a user is using the clipboard manager, this will not be able to delete it, and it is the user's responsibility.
-    pub delay: i64,
     /// confdir is the path where the program tries to read the config.toml from.
     /// It tries to read if the confdir is explicitly specified as a commandline arg,
     /// and if not, reads the home directory environment, and if it is None, use the
@@ -187,7 +237,4 @@ pub struct Config {
     pub conffile: String,
     /// datafile is the encrypted file that this program stores the passwords into.
     pub datafile: String,
-    /// get is used to store the key that this program will refer to, to retrieve the password from.
-    /// This is of section:key format, eg: bank:some_bank
-    pub get: String,
 }

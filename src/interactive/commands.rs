@@ -82,6 +82,7 @@ impl Command {
                     let file_metadata = metadata(p[0].trim());
                     if file_metadata.is_ok() && file_metadata.unwrap().is_file() {
                         PBKDF2_HASH.write().unwrap().clear();
+                        AES_IV.write().unwrap().clear();
                         c.datafile = p[0].trim().to_string();
                         Some(format!(
                             "changed datafile to {:?}",
@@ -176,8 +177,24 @@ impl Command {
                         Err(e) => format!("Error getting dump. Error: {:?}", e),
                     })
                 }
-            }
-       
+            }    
+    }
+
+    pub(crate) fn dump_only_keys_command() -> Self {
+        Command {
+            name: "/dumpkeys",
+            description: "Dump only the keys, and not the associated passwords.",
+            action: |c, _| {
+                if PBKDF2_HASH.read().unwrap().len() == 0 || AES_IV.read().unwrap().len() == 0 {
+                    return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
+                    }
+                    return Some(match crate::crypt::Data::get_all_keys(&PBKDF2_HASH.read().unwrap().to_vec(), &AES_IV.read().unwrap().to_vec(), c) {
+                        Ok(a) => a,
+                        Err(e) => format!("Error getting all keys. Error: {:?}", e),
+                    });
+                    
+            },
+        }
     }
 }
 
@@ -210,6 +227,9 @@ The technical difficulty makes it impossible for pwb to find which version
 of the program was used to encrypt this file. If the config file is not replaced by you, 
 check the {:?} file to see the version, and download that release. Check help to see the github page to
 find the releases.", err, &c.conffile);
+        AES_IV.write().unwrap().clear();
+        PBKDF2_HASH.write().unwrap().clear();
+
             return;
         }
     } {
@@ -253,6 +273,8 @@ pub(crate) fn build_all_commands() {
     tmp_rwlock.push(Command::get_command());
     tmp_rwlock.push(Command::put_command());
     tmp_rwlock.push(Command::dump_all_command());
+    tmp_rwlock.push(Command::dump_only_keys_command());
+
 
     // use this only at the last so that the commands are populated into the lazy_static.
     tmp_rwlock.push(Command::help_command());
