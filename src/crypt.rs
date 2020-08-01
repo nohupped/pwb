@@ -2,7 +2,6 @@
 use chrono::prelude::*;
 use openssl::pkcs5::pbkdf2_hmac;
 use openssl::symm::{encrypt, Cipher, decrypt};
-use openssl::error::ErrorStack;
 
 use std::io::Write;
 use std::io::Read;
@@ -102,9 +101,9 @@ impl Data {
         let mut fd = std::fs::File::create(&c.datafile).unwrap();
         fd.write_all(&ciphertext).unwrap();
         // println!("{:?}", ciphertext.iter().map(|&c| c as char).collect::<String>());
-        // let uncipher= CIPHER_256_FUNCTION();
-        // let unciphertext = decrypt(uncipher,&creds.pbkdf2_hash, None, &ciphertext).unwrap();
-        // println!("{:?}", unciphertext.iter().map(|&c| c as char).collect::<String>());
+        // let decipher= CIPHER_256_FUNCTION();
+        // let deciphertext = decrypt(decipher,&creds.pbkdf2_hash, None, &ciphertext).unwrap();
+        // println!("{:?}", deciphertext.iter().map(|&c| c as char).collect::<String>());
     }
     
     pub fn check_decryption_file(&mut self, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<bool, Box<dyn std::error::Error>> {
@@ -112,10 +111,10 @@ impl Data {
         let mut fd = std::fs::File::open(&c.datafile).unwrap();
         let mut data = Vec::new();
         fd.read_to_end(&mut data).unwrap();
-        let uncipher= CIPHER_256_FUNCTION();
-        let unciphertext =  decrypt(uncipher,&pbkdf2_hash, None, &data)?;
+        let decipher= CIPHER_256_FUNCTION();
+        let deciphertext =  decrypt(decipher,&pbkdf2_hash, None, &data)?;
    
-        let decoded: Self = bincode::deserialize(&unciphertext[..])?;
+        let decoded: Self = bincode::deserialize(&deciphertext[..])?;
         println!("Trying to read metadata from decrypted file, {:?}", decoded.meta.decrypted_string);
 
         if decoded.meta.decrypted_string == "decrypted_string".to_string() {
@@ -123,14 +122,13 @@ impl Data {
         }
         Ok(false)
     }
-    pub fn get_key(&mut self, key: String, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn get_key(key: String, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
         let mut fd = std::fs::File::open(&c.datafile).unwrap();
         let mut data = Vec::new();
         fd.read_to_end(&mut data).unwrap();
-        let uncipher= CIPHER_256_FUNCTION();
-        let unciphertext =  decrypt(uncipher,&pbkdf2_hash, None, &data)?;
-        let decoded: Self = bincode::deserialize(&unciphertext[..])?;
-        println!("{:?}", decoded);
+        let decipher= CIPHER_256_FUNCTION();
+        let deciphertext =  decrypt(decipher,&pbkdf2_hash, None, &data)?;
+        let decoded: Self = bincode::deserialize(&deciphertext[..])?;
         return match decoded.data.get(&key) {
             Some(a) => return Ok(a.to_string()),
             
@@ -139,29 +137,34 @@ impl Data {
 
     }
 
-    pub fn put_key(&mut self, key: String, val: String, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn put_key(key: String, val: String, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
         let mut fd = std::fs::File::open(&c.datafile).unwrap();
         let mut data = Vec::new();
         fd.read_to_end(&mut data).unwrap();
-        let uncipher= CIPHER_256_FUNCTION();
-        let unciphertext =  decrypt(uncipher,&pbkdf2_hash, None, &data)?;
-        let mut decoded: Self = bincode::deserialize(&unciphertext[..])?;
+        let decipher= CIPHER_256_FUNCTION();
+        let deciphertext =  decrypt(decipher,&pbkdf2_hash, None, &data)?;
+        let mut decoded: Self = bincode::deserialize(&deciphertext[..])?;
+        decoded.meta.last_modified = Utc::now();
         let d = &decoded.data.insert(key, val);
+        decoded.encrypt_with_pbkdf2_and_write(pbkdf2_hash, c);
         match d {
             Some(x) => {
-                self.encrypt_with_pbkdf2_and_write(pbkdf2_hash, c);
-                println!("Over-written data: {}", x);
-                Ok(x.to_string())
+                Ok(format!("Old password: {:?}\nThis has been over-written and is lost forever", x.to_string()))
             }
             None => {
-                self.encrypt_with_pbkdf2_and_write(pbkdf2_hash, c);
-
-                Ok(format!("Newly written data"))
-
-
+                Ok(format!("written to vault"))
             }
         }
-            
+    }
+
+    pub fn get_all(pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
+        let mut fd = std::fs::File::open(&c.datafile).unwrap();
+        let mut data = Vec::new();
+        fd.read_to_end(&mut data).unwrap();
+        let decipher= CIPHER_256_FUNCTION();
+        let deciphertext =  decrypt(decipher,&pbkdf2_hash, None, &data)?;
+        let decoded: Self = bincode::deserialize(&deciphertext[..])?;
+        return Ok(format!("{:?}",decoded));
 
     }
     

@@ -63,8 +63,8 @@ impl Command {
         Command {
             name: "/q",
             description: "Quit this shell",
-            action: |_, meta| {
-                println!(r#"Quitting on {:?}"#, meta.command.unwrap().trim());
+            action: |_, _| {
+                println!(r#"Ok Bye"#);
                 std::process::exit(1)
             },
         }
@@ -119,10 +119,8 @@ impl Command {
                     if PBKDF2_HASH.read().unwrap().len() == 0 {
                         return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
                     }
-                    let mut data = crate::crypt::Data::new();
-                    match data.get_key(p[0].to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), c) {
+                    match crate::crypt::Data::get_key(p[0].trim().to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), c) {
                         Ok(a) => return {
-                            println!("Value is {:?}", a);
                             Some(a)
                         },
                         Err(_) => return Some(format!("Key not found...")),
@@ -138,18 +136,17 @@ impl Command {
     pub(crate) fn put_command() -> Self{
         Command {
             name: "/put",
-            description: "Put a specified password into encrypted database. Eg: /put server_password 98hy54@1!55. WARNING: This will overwrite the password if it already exists under that key",
+            description: "Put a specified password into encrypted database. Eg: /put server_password 98hy54@1!55. 
+             WARNING: This will overwrite the password if it already exists under that key and WILL echo the old password to the TTY",
             action: |c, m| {
-                println!("{:?}", &m.params.unwrap().len());
                 if let Some(p) =  m.params {
                     if p.len() != 2 {
-                        return Some("You didn't give a key an value. Check /h for usage".to_string());
+                        return Some("You didn't give a key and value. Check /h for usage".to_string());
                     }
                     if PBKDF2_HASH.read().unwrap().len() == 0 {
                         return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
                     }
-                    let mut data = crate::crypt::Data::new();
-                    match data.put_key(p[0].to_string(), p[1].to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), c) {
+                    match crate::crypt::Data::put_key(p[0].trim().to_string(), p[1].trim().to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), c) {
                         Ok(a) => {
                             return Some(a)
                         },
@@ -160,9 +157,25 @@ impl Command {
                     Some(format!("You didn't give a key name. Check /h for usage."))
                 }
                 
-                // return Some(format!("You didn't give a key name. Check /h for usage."))
             },
         }
+    }
+
+    pub(crate) fn dump_all_command() -> Self{
+        Command {
+            name: "/dumpall",
+            description: "Dump all the contents in the password db including the metadata",
+            action: |c, _| {
+                if PBKDF2_HASH.read().unwrap().len() == 0 {
+                    return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
+                    }
+                    return Some(match crate::crypt::Data::get_all(&PBKDF2_HASH.read().unwrap().to_vec(), c) {
+                        Ok(a) => a,
+                        Err(e) => format!("Error getting dump. Error: {:?}", e),
+                    })
+                }
+            }
+       
     }
 }
 
@@ -231,6 +244,7 @@ pub(crate) fn build_all_commands() {
     tmp_rwlock.push(Command::unlock_command());
     tmp_rwlock.push(Command::get_command());
     tmp_rwlock.push(Command::put_command());
+    tmp_rwlock.push(Command::dump_all_command());
 
     // use this only at the last so that the commands are populated into the lazy_static.
     tmp_rwlock.push(Command::help_command());
