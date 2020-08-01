@@ -13,7 +13,7 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub fn parse_params() -> Config {
     let matches = App::new("The Encrypted Password Bank")
                             .version(VERSION)
-                            .author("https://github.com/nohupped")
+                            .author("https://github.com/nohupped/pwb")
                             .about("Stores your passwords in an encrypted file that can be retrieved with a master password")
                             .arg(Arg::with_name("get")
                                 .short("g")
@@ -102,6 +102,7 @@ pub fn generate_default_config(c: &mut Config) {
         std::fs::create_dir_all(format!(r#"{}/data"#, c.confdir)).unwrap();
         println!("Created {:?}", &c.confdir);
         let mut toml_config = toml::map::Map::new();
+        toml_config.insert("version".into(), VERSION.into());
         toml_config.insert("default_cryptfile".into(), c.datafile.clone().into());
         // This key holds the recently used crypt file locations and can be listed from the interactive mode
         toml_config.insert(
@@ -126,11 +127,26 @@ pub fn generate_default_config(c: &mut Config) {
         let mut creds = crypt::Creds::ask_username_and_password(true);
         creds.generate_pbkdf2();
         let mut data = crypt::Data::new();
-        data.encrypt_with_pbkdf2_and_write(&creds, c);
+        match data.encrypt_with_pbkdf2_and_write(&creds.pbkdf2_hash, &creds.aes_iv, c) {
+            Ok(a) => a,
+            Err(e) => {
+                println!("Error: {:?}", e);
+                std::fs::remove_dir_all(&c.confdir).expect(&format!(
+                    "Cannot clean {}. Remove it manually..",
+                    &c.confdir
+                ));
+            },
+        };
 
         println!("Created encrypted {:?}. This can be populated in the interactive mode. Check /h when in interactive mode.", &c.datafile);
         println!("Checking decryption test on file...");
-        if data.check_decryption_file(&creds, c) {
+        if match data.check_decryption_file(&creds.pbkdf2_hash,  &creds.aes_iv, c) {
+            Ok(a) => a,
+            Err(e) => {
+                println!("{:?}", e);
+                false
+            },
+        } {
             println!("decryption succeeded")
         } else {
             println!("decryption failed...cleaning up");
