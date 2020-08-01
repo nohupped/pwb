@@ -127,11 +127,20 @@ pub fn generate_default_config(c: &mut Config) {
         let mut creds = crypt::Creds::ask_username_and_password(true);
         creds.generate_pbkdf2();
         let mut data = crypt::Data::new();
-        data.encrypt_with_pbkdf2_and_write(&creds.pbkdf2_hash, c);
+        match data.encrypt_with_pbkdf2_and_write(&creds.pbkdf2_hash, &creds.aes_iv, c) {
+            Ok(a) => a,
+            Err(e) => {
+                println!("Error: {:?}", e);
+                std::fs::remove_dir_all(&c.confdir).expect(&format!(
+                    "Cannot clean {}. Remove it manually..",
+                    &c.confdir
+                ));
+            },
+        };
 
         println!("Created encrypted {:?}. This can be populated in the interactive mode. Check /h when in interactive mode.", &c.datafile);
         println!("Checking decryption test on file...");
-        if match data.check_decryption_file(&creds.pbkdf2_hash, c) {
+        if match data.check_decryption_file(&creds.pbkdf2_hash,  &creds.aes_iv, c) {
             Ok(a) => a,
             Err(e) => {
                 println!("{:?}", e);

@@ -8,23 +8,31 @@ use std::io::Read;
 use std::collections::HashMap;
 
 use rpassword::read_password;
-// Length of credential. Using 16 here to use it for the AES128
-const PBKDF2_CREDENTIAL_LEN: usize = 32;
+/// Length of credential. Using 32 here for AES 256 standards that require the key length to be 32 bytes
+const USED_PBKDF2_HASH_LEN: usize = 32;
+/// AES IV specification is 16 bytes
+const AES_IV_SIZE: usize = 16;
+/// Total length of the PBKDF2 hash length that we store in bytes. We use the first 32 bytes as the pbkdf2 hash and the last 16 bytes as the aes IV
+const TOTAL_PBKDF2_CREDENTIAL_LEN: usize = 256;
+/// The number of iterations to generate the pbkdf2 hash
 const PBKDF2_ITERATIONS: usize = 100;
 
-const CIPHER_256_FUNCTION: fn () -> Cipher = Cipher::aes_256_ecb;
+// We use cbc (as opposed to ecb for making use of the AES IV);
+const CIPHER_256_FUNCTION: fn () -> Cipher = Cipher::aes_256_cbc;
 
-type Credential = [u8; PBKDF2_CREDENTIAL_LEN];
 
-/// Creds store the credentials in byte array and in hashed byte array (pbkdf2) format
+/// Creds store the pbkdf2 hash ad the aes IV.
 #[derive(Debug)]
 pub struct Creds {
     pub username_salt: Vec<u8>,
     pub password_key: Vec<u8>,
     pub pbkdf2_hash: Vec<u8>,
+    pub aes_iv: Vec<u8>,
 }
 
 impl Creds {
+
+    /// prompts for a userinput for username and password. If ask_multi is true, will ask twice to confirm.
     pub fn ask_username_and_password(ask_multi: bool) -> Creds {
         println!("You will be asked to enter a username and password twice that will not be echoed to the terminal.");
         let username = _confirm_user_input("username".to_string(), ask_multi).unwrap();
@@ -33,11 +41,13 @@ impl Creds {
             username_salt: username.as_bytes().to_vec(),
             password_key: password.as_bytes().to_vec(),
             pbkdf2_hash: Vec::new(),
+            aes_iv: Vec::new(),
         }
     }
-    /// Run this function to populate the member pbkdf2_hash with the PBKDF2 Hash
+    /// Generates a 32 byte pbkdf2 hash and a 16 byte aes iv. Use these to pass on to the methods and functions 
+    /// that encrypts the Data with aes256 cbc encryption.
     pub fn generate_pbkdf2(&mut self) {
-        let mut to_store: Credential = [0u8; PBKDF2_CREDENTIAL_LEN];
+        let mut to_store  = [0u8; TOTAL_PBKDF2_CREDENTIAL_LEN];
         match pbkdf2_hmac(
             self.password_key.as_ref(),
             self.username_salt.as_ref(),
@@ -46,8 +56,11 @@ impl Creds {
             &mut to_store,
         ) {
             Ok(_) => {
-                self.pbkdf2_hash = to_store.to_vec();
+                self.pbkdf2_hash = to_store[0..USED_PBKDF2_HASH_LEN].to_vec();
+                self.aes_iv = to_store[TOTAL_PBKDF2_CREDENTIAL_LEN - AES_IV_SIZE..].to_vec();
                 println!("Hash of length {} generated", self.pbkdf2_hash.len());
+                println!("AES IV of length {} generated", self.aes_iv.len());
+                println!()
             }
             Err(err) => {
                 println!("Error when generating hash; Error: {:?}", err);
@@ -57,7 +70,7 @@ impl Creds {
     }
 }
 
-/// Stores the actual data that will be encrypted and stored.
+/// Stores the actual data that will be serialised, encrypted using aes 256 cbc and stored.
 /// Warning:: Changing this will break compatibility with older
 /// versions when deserialising.
 #[derive(Debug, Serialize, Deserialize)]
@@ -88,31 +101,28 @@ impl Data {
          }
     }
 
-    pub fn encrypt_with_pbkdf2_and_write(&mut self, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) {
+    pub fn encrypt_with_pbkdf2_and_write(&mut self, pbkdf2_hash: &Vec<u8>, iv: &Vec<u8>, c: &crate::helpers::Config) -> Result<(), Box<dyn std::error::Error>> {
         println!("Serializing and encrypting the struct using aes_256_ecb" );
         let encoded: Vec<u8> = bincode::serialize(&self).unwrap();
         let cipher = CIPHER_256_FUNCTION();
         let ciphertext = encrypt(
             cipher,
             &pbkdf2_hash,
-            None,
+            Some(iv),
             &encoded,
         ).unwrap();
-        let mut fd = std::fs::File::create(&c.datafile).unwrap();
-        fd.write_all(&ciphertext).unwrap();
-        // println!("{:?}", ciphertext.iter().map(|&c| c as char).collect::<String>());
-        // let decipher= CIPHER_256_FUNCTION();
-        // let deciphertext = decrypt(decipher,&creds.pbkdf2_hash, None, &ciphertext).unwrap();
-        // println!("{:?}", deciphertext.iter().map(|&c| c as char).collect::<String>());
+        let mut fd = std::fs::File::create(&c.datafile)?;
+        fd.write_all(&ciphertext)?;
+        Ok(())
     }
     
-    pub fn check_decryption_file(&mut self, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn check_decryption_file(&mut self, pbkdf2_hash: &Vec<u8>, aes_iv: &Vec<u8>, c: &crate::helpers::Config) -> Result<bool, Box<dyn std::error::Error>> {
         println!("Deserializing from file {:?}...", &c.datafile);
         let mut fd = std::fs::File::open(&c.datafile).unwrap();
         let mut data = Vec::new();
         fd.read_to_end(&mut data).unwrap();
         let decipher= CIPHER_256_FUNCTION();
-        let deciphertext =  decrypt(decipher,&pbkdf2_hash, None, &data)?;
+        let deciphertext =  decrypt(decipher,&pbkdf2_hash, Some(aes_iv), &data)?;
    
         let decoded: Self = bincode::deserialize(&deciphertext[..])?;
         println!("Trying to read metadata from decrypted file, {:?}", decoded.meta.decrypted_string);
@@ -122,12 +132,12 @@ impl Data {
         }
         Ok(false)
     }
-    pub fn get_key(key: String, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn get_key(key: String, pbkdf2_hash: &Vec<u8>, aes_iv: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
         let mut fd = std::fs::File::open(&c.datafile).unwrap();
         let mut data = Vec::new();
         fd.read_to_end(&mut data).unwrap();
         let decipher= CIPHER_256_FUNCTION();
-        let deciphertext =  decrypt(decipher,&pbkdf2_hash, None, &data)?;
+        let deciphertext =  decrypt(decipher,&pbkdf2_hash, Some(aes_iv), &data)?;
         let decoded: Self = bincode::deserialize(&deciphertext[..])?;
         return match decoded.data.get(&key) {
             Some(a) => return Ok(a.to_string()),
@@ -137,16 +147,16 @@ impl Data {
 
     }
 
-    pub fn put_key(key: String, val: String, pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn put_key(key: String, val: String, pbkdf2_hash: &Vec<u8>, iv: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
         let mut fd = std::fs::File::open(&c.datafile).unwrap();
         let mut data = Vec::new();
         fd.read_to_end(&mut data).unwrap();
         let decipher= CIPHER_256_FUNCTION();
-        let deciphertext =  decrypt(decipher,&pbkdf2_hash, None, &data)?;
+        let deciphertext =  decrypt(decipher,&pbkdf2_hash, Some(iv), &data)?;
         let mut decoded: Self = bincode::deserialize(&deciphertext[..])?;
         decoded.meta.last_modified = Utc::now();
         let d = &decoded.data.insert(key, val);
-        decoded.encrypt_with_pbkdf2_and_write(pbkdf2_hash, c);
+        decoded.encrypt_with_pbkdf2_and_write(pbkdf2_hash, &iv, c)?;
         match d {
             Some(x) => {
                 Ok(format!("Old password: {:?}\nThis has been over-written and is lost forever", x.to_string()))
@@ -157,19 +167,18 @@ impl Data {
         }
     }
 
-    pub fn get_all(pbkdf2_hash: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
+    pub fn get_all(pbkdf2_hash: &Vec<u8>, aes_iv: &Vec<u8>, c: &crate::helpers::Config) -> Result<String, Box<dyn std::error::Error>> {
         let mut fd = std::fs::File::open(&c.datafile).unwrap();
         let mut data = Vec::new();
         fd.read_to_end(&mut data).unwrap();
         let decipher= CIPHER_256_FUNCTION();
-        let deciphertext =  decrypt(decipher,&pbkdf2_hash, None, &data)?;
+        let deciphertext =  decrypt(decipher,&pbkdf2_hash, Some(aes_iv), &data)?;
         let decoded: Self = bincode::deserialize(&deciphertext[..])?;
         return Ok(format!("{:?}",decoded));
 
     }
     
 }
-
 
 fn _confirm_user_input(prompt: String, multi: bool) -> Option<String> {
     if multi {

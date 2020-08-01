@@ -1,30 +1,28 @@
-# A rust password bank to store passwords with a master key/password
+# A rust personal password bank to store passwords, locked with a username/password
 
 ## Features
 
 - [x] Generate a default config at $HOME/.pwb/config.toml which stores path to the encrypted password bank
-- [ ] open/close command to an encrypted password file
+- [x] An interactive shell
+- [x] `/unlock` command to unlock an encrypted password file
 - [x] `/h` command to list all supported commands
 - [x] Take username and password to generate key and salt.
-- [ ] Create new sections for passwords
-- [ ] Save new passwords
-- [ ] Erase clipboard after delay (Display with a fancy spinner)
+- [x] Each password associated with a key, eg: ssh, bank, etc.
+- [x] Save new passwords
+- [x] Use `PBKDF2_HMAC` to generate a Hash using Username and Password
+- [x] Use aes256 to encrypt the data.
+- [ ] Commandline parameters to get and put passwords to the password store
+- [ ] Capture password to clipbpard when not in interactive mode (controlled via the config file or env var).
+- [ ] Erase clipboard after delay (If a clipboard manager is being used, it is out of scope)
 - [ ] Interactive mode should have option to change to new pwb db (A command that modifies the toml like update_db_path or something)
 - [ ] Support aes128 = 16 byte key, aes192 = 24, aes256 = 32 byte keys implementations.
 
 ## How encryption is implemented
 
 - User will be asked to input a username and password.
-- A PBKDF2_HMAC_SHA256 is used to compute a 16 bytes long PBKDF2 key with username as salt and password as key.
-- Use this key to encrypt the userinput to AES ECB standard encrypted byte array and store it in a struct. (ECB is used because this will be a personal password bank and the password is not stored anywhere, )
-- Since the max block size is 16 bytes, split the strings into chunks and store the size of the initial password as well (Use a struct for that)
+- A PBKDF2_HMAC_SHA256 is used to compute a 256 byte PBKDF2 key. The first 32 bytes is used as the aes key and the last 16 bytes as the AES IV.
+- Use this key and IV to encrypt the data into an AES CBC standard
 - Use serde to serialise this and store into disk.
-
-## Decryption
-
-- User will be asked to input a username and password.
-- A PBKDF2_HMAC_SHA256 is used to compute a 16 byte long PBKDF2 key using the username as salt and password as key.
-- Use this key to decrypt the struct and read the struct
 
 ### Crates used
 

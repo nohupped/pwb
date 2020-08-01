@@ -18,6 +18,8 @@ lazy_static::lazy_static! {
     #[derive(Debug, Copy, Clone)]
     pub(crate) static ref ALLCOMMANDS: RwLock<Vec<Command>> =  RwLock::new(Vec::new());
     pub(crate) static ref PBKDF2_HASH: RwLock<Vec<u8>> =  RwLock::new(Vec::new());
+    pub(crate) static ref AES_IV: RwLock<Vec<u8>> =  RwLock::new(Vec::new());
+
 
 
 }
@@ -116,10 +118,10 @@ impl Command {
             description: "Gets the specified key from the encrypted database. Eg: /get server_password. Displays a key error if the key is not present",
             action: |c, m| {
                 if let Some(p) =  m.params {
-                    if PBKDF2_HASH.read().unwrap().len() == 0 {
+                    if PBKDF2_HASH.read().unwrap().len() == 0 || AES_IV.read().unwrap().len() == 0 {
                         return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
                     }
-                    match crate::crypt::Data::get_key(p[0].trim().to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), c) {
+                    match crate::crypt::Data::get_key(p[0].trim().to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), &AES_IV.read().unwrap().to_vec(), c) {
                         Ok(a) => return {
                             Some(a)
                         },
@@ -143,10 +145,10 @@ impl Command {
                     if p.len() != 2 {
                         return Some("You didn't give a key and value. Check /h for usage".to_string());
                     }
-                    if PBKDF2_HASH.read().unwrap().len() == 0 {
+                    if PBKDF2_HASH.read().unwrap().len() == 0 || AES_IV.read().unwrap().len() == 0 {
                         return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
                     }
-                    match crate::crypt::Data::put_key(p[0].trim().to_string(), p[1].trim().to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), c) {
+                    match crate::crypt::Data::put_key(p[0].trim().to_string(), p[1].trim().to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), &AES_IV.read().unwrap().to_vec(), c) {
                         Ok(a) => {
                             return Some(a)
                         },
@@ -166,10 +168,10 @@ impl Command {
             name: "/dumpall",
             description: "Dump all the contents in the password db including the metadata",
             action: |c, _| {
-                if PBKDF2_HASH.read().unwrap().len() == 0 {
+                if PBKDF2_HASH.read().unwrap().len() == 0 || AES_IV.read().unwrap().len() == 0 {
                     return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
                     }
-                    return Some(match crate::crypt::Data::get_all(&PBKDF2_HASH.read().unwrap().to_vec(), c) {
+                    return Some(match crate::crypt::Data::get_all(&PBKDF2_HASH.read().unwrap().to_vec(), &AES_IV.read().unwrap().to_vec(), c) {
                         Ok(a) => a,
                         Err(e) => format!("Error getting dump. Error: {:?}", e),
                     })
@@ -188,9 +190,15 @@ fn _unlock(c: &Config) {
     let mut tmp_rwlock = PBKDF2_HASH.write().unwrap();
     tmp_rwlock.append(&mut creds.pbkdf2_hash);
     std::mem::drop(tmp_rwlock);
+
+    AES_IV.write().unwrap().clear();
+    let mut tmp_rwlock = AES_IV.write().unwrap();
+    tmp_rwlock.append(&mut creds.aes_iv);
+    std::mem::drop(tmp_rwlock);
     let mut data = crate::crypt::Data::new();
     let hash = &PBKDF2_HASH.read().unwrap().to_vec();
-    if match data.check_decryption_file(&hash, c) {
+    let iv = &AES_IV.read().unwrap().to_vec();
+    if match data.check_decryption_file(&hash, &iv, c) {
         Ok(a) => a,
         Err(err) => {
             println!("Unlocking and deserialising failed with error:\n{:?}. 
