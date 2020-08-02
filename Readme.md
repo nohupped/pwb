@@ -1,8 +1,6 @@
-# PWB
+# pwb
 
-A personal password bank written in RUST to store all your passwords, locked with one username and password.
-
-One tool to store it all.. One tool to lose it too..
+A password bank written in RUST to store all your passwords, locked with one username and password. One tool to store it all.. One tool to lose it too..
 
 This is a personal tool written as a part of a personal project to learn and explore Rust. There are many places that can definitely be improved or can use some good Rust practices.
 
