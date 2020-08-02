@@ -34,7 +34,6 @@ impl Creds {
 
     /// prompts for a userinput for username and password. If ask_multi is true, will ask twice to confirm.
     pub fn ask_username_and_password(ask_multi: bool) -> Creds {
-        println!("You will be asked to enter a username and password twice that will not be echoed to the terminal.");
         let username = _confirm_user_input("username".to_string(), ask_multi).unwrap();
         let password = _confirm_user_input("password".to_string(), ask_multi).unwrap();
         Creds {

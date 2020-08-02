@@ -78,7 +78,7 @@ impl Command {
             name: "/select",
             description: "Selects an existing pwb encrypted file. Usage: /changedb /tmp/newdb.pwb. Note: This will not unlock the DB, just selects it",
             action: |c, meta| {
-                if let Some(p) = meta.params {
+                if let Some(p) = &meta.params {
                     let file_metadata = metadata(p[0].trim());
                     if file_metadata.is_ok() && file_metadata.unwrap().is_file() {
                         PBKDF2_HASH.write().unwrap().clear();
@@ -118,7 +118,7 @@ impl Command {
             name: "/get",
             description: "Gets the specified key from the encrypted database. Eg: /get server_password. Displays a key error if the key is not present",
             action: |c, m| {
-                if let Some(p) =  m.params {
+                if let Some(p) =  &m.params {
                     if PBKDF2_HASH.read().unwrap().len() == 0 || AES_IV.read().unwrap().len() == 0 {
                         return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
                     }
@@ -142,7 +142,7 @@ impl Command {
             description: "Put a specified password into encrypted database. Eg: /put server_password 98hy54@1!55. 
              WARNING: This will overwrite the password if it already exists under that key and WILL echo the old password to the TTY",
             action: |c, m| {
-                if let Some(p) =  m.params {
+                if let Some(p) =  &m.params {
                     if p.len() != 2 {
                         return Some("You didn't give a key and value. Check /h for usage".to_string());
                     }
@@ -239,29 +239,6 @@ find the releases.", err, &c.conffile);
             "Unlocking {:?} failed. Check your username and password.",
             c.datafile
         );
-    }
-}
-
-/// Unlock error when the db unlock fails
-#[derive(Debug)]
-struct CommandError {
-    details: String,
-}
-impl CommandError {
-    fn new(msg: &str) -> Self {
-        Self {
-            details: msg.to_string(),
-        }
-    }
-}
-impl std::fmt::Display for CommandError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.details)
-    }
-}
-impl std::error::Error for CommandError {
-    fn description(&self) -> &str {
-        &self.details
     }
 }
 
