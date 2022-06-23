@@ -1,6 +1,6 @@
 //! Crypt crate has the cryptographic implementation of the struct that we encrypt and store.
 use anyhow::Result;
-use chrono::prelude::*;
+use chrono::{DateTime, Utc};
 use openssl::pkcs5::pbkdf2_hmac;
 use openssl::symm::{decrypt, encrypt, Cipher};
 use std::collections::HashMap;
