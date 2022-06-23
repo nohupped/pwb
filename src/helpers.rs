@@ -3,11 +3,9 @@
 
 use crate::crypt;
 use clap::{App, Arg};
-use dirs;
-use toml;
 
 /// Read VERSION from Cargo Package Version
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Parses the command line arguments, populates them in Config struct and if init is true, inits with the default configuration file.
 pub fn parse_params() -> Config {
@@ -15,29 +13,29 @@ pub fn parse_params() -> Config {
                             .version(VERSION)
                             .author("https://github.com/nohupped/pwb")
                             .about("Stores your passwords in an encrypted file that can be retrieved with a master password")
-                            .arg(Arg::with_name("get")
-                                .short("g")
+                            .arg(Arg::new("get")
+                                .short('g')
                                 .long("get")
                                 .number_of_values(1)
                                 .help("get a stored password associated with a key."))
-                            .arg(Arg::with_name("allkeys")
-                                .short("a")
+                            .arg(Arg::new("allkeys")
+                                .short('a')
                                 .long("allkeys")
                                 .required(false)
                                 .help("forgot what the keyname was? Run this to get a clue on what keys you stored your passwords."))
-                            .arg(Arg::with_name("put")
-                                .short("p")
+                            .arg(Arg::new("put")
+                                .short('p')
                                 .long("put")
                                 .value_name("server '!@355RRt'")
                                 .number_of_values(2)
                                 .help("Puts a password into the password db associated with a key."))
-                            .arg(Arg::with_name("interactive")
-                                .short("i")
+                            .arg(Arg::new("interactive")
+                                .short('i')
                                 .long("interactive")
                                 .help("starts an interactive shell. When in shell, /h for subcommands.")
                                 .required(false))
-                            .arg(Arg::with_name("confdir")
-                                .short("c")
+                            .arg(Arg::new("confdir")
+                                .short('c')
                                 .long("confdir")
                                 .value_name("/home/user/.pwb")
                                 .env("PWB_CONFDIR")
@@ -68,7 +66,7 @@ pub fn parse_params() -> Config {
         dump: matches.is_present("dump"),
 
         confdir: if matches.is_present("confdir") {
-            format!(r#"{}"#, matches.value_of("confdir").unwrap().to_string())
+            matches.value_of("confdir").unwrap().to_string()
         } else {
             match home_dir {
                 Some(x) => format!(r#"{}/.pwb"#, x.into_os_string().into_string().unwrap()),
@@ -88,7 +86,7 @@ pub fn parse_params() -> Config {
             None => {
                 println!("Received None value from parsing parameters. Check --help for usage.");
                 std::process::exit(1)
-            },
+            }
         };
         let mut creds = crate::crypt::Creds::ask_username_and_password(false);
         creds.generate_pbkdf2();
@@ -109,26 +107,32 @@ pub fn parse_params() -> Config {
     }
     // Arg parsing for action get ends here
 
-    // Args parsing and action for put 
+    // Args parsing and action for put
     if matches.is_present("put") {
         let mut params_iter = match matches.values_of("put") {
             Some(a) => a,
             None => {
                 println!("Received None value from parsing parameters. Check --help for usage.");
                 std::process::exit(1)
-            },
+            }
         };
         let mut creds = crate::crypt::Creds::ask_username_and_password(false);
         creds.generate_pbkdf2();
-        match crate::crypt::Data::put_key(params_iter.next().unwrap().to_string(), params_iter.next().unwrap().to_string(), &creds.pbkdf2_hash, &creds.aes_iv, &config) {
+        match crate::crypt::Data::put_key(
+            params_iter.next().unwrap().to_string(),
+            params_iter.next().unwrap().to_string(),
+            &creds.pbkdf2_hash,
+            &creds.aes_iv,
+            &config,
+        ) {
             Ok(a) => {
                 println!("{}", a);
                 std::process::exit(0)
-            },
+            }
             Err(e) => {
                 println!("Error putting data into the datastore, {:?}", e);
                 std::process::exit(1)
-            },
+            }
         };
     }
     // Arg parsing for put ends here
@@ -192,10 +196,9 @@ pub fn generate_default_config(c: &mut Config) {
             Ok(a) => a,
             Err(e) => {
                 println!("Error: {:?}", e);
-                std::fs::remove_dir_all(&c.confdir).expect(&format!(
-                    "Cannot clean {}. Remove it manually..",
-                    &c.confdir
-                ));
+                std::fs::remove_dir_all(&c.confdir).unwrap_or_else(|_| {
+                    panic!("Cannot clean {}. Remove it manually..", &c.confdir)
+                });
             }
         };
 
@@ -211,10 +214,8 @@ pub fn generate_default_config(c: &mut Config) {
             println!("decryption succeeded")
         } else {
             println!("decryption failed...cleaning up");
-            std::fs::remove_dir_all(&c.confdir).expect(&format!(
-                "Cannot clean {}. Remove it manually..",
-                &c.confdir
-            ));
+            std::fs::remove_dir_all(&c.confdir)
+                .unwrap_or_else(|_| panic!("Cannot clean {}. Remove it manually..", &c.confdir));
         }
 
         return;

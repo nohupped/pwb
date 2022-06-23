@@ -1,7 +1,7 @@
 mod helpers;
 use helpers::parse_params;
-mod interactive;
 mod crypt;
+mod interactive;
 use interactive::shell;
 
 #[macro_use]
@@ -12,5 +12,4 @@ fn main() {
     if x.interactive {
         shell::shell(&mut x);
     }
-
 }

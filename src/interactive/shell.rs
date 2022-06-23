@@ -20,22 +20,22 @@ pub(crate) struct InteractiveMeta<'a> {
 }
 
 /// runs the shell.
-pub fn shell(mut c: &mut helpers::Config) {
+pub fn shell(c: &mut helpers::Config) {
     print_banner();
 
-    let mut detailed_prompt = prompt_builder(&c);
+    let mut detailed_prompt = prompt_builder(c);
 
     build_all_commands();
 
     loop {
         print!("{}", detailed_prompt);
         std::io::Write::flush(&mut std::io::stdout()).expect("flush failed!");
-        println!("{}", input(&mut c));
-        detailed_prompt = prompt_builder(&c);
+        println!("{}", input(c));
+        detailed_prompt = prompt_builder(c);
     }
 }
 
-fn input(mut config: &mut helpers::Config) -> String {
+fn input(config: &mut helpers::Config) -> String {
     let mut ret = String::new();
     // Read user input to ret
     let mut meta = InteractiveMeta {
@@ -46,7 +46,7 @@ fn input(mut config: &mut helpers::Config) -> String {
         .read_line(&mut ret)
         .expect("Failed to read from stdin");
     // Split command and parameters
-    let command_vector = ret.split(" ").collect::<Vec<&str>>();
+    let command_vector = ret.split(' ').collect::<Vec<&str>>();
 
     // populate command and parameters into the struct
     if command_vector.len() > 1 {
@@ -65,11 +65,9 @@ fn input(mut config: &mut helpers::Config) -> String {
     {
         Some(a) => {
             let x = a.action;
-            match x(&mut config, &mut meta) {
+            match x(config, &mut meta) {
                 Some(val) => val,
-                None => {
-                    "".to_string()       
-                }
+                None => "".to_string(),
             }
         }
         None => "Command not found.".to_string(),

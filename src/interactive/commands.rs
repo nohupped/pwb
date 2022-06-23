@@ -6,7 +6,6 @@
 
 use crate::helpers::Config;
 use crate::interactive::shell;
-use lazy_static;
 use std::fs::metadata;
 use std::sync::RwLock;
 
@@ -37,7 +36,7 @@ pub(crate) struct Command {
 /// A Debug implementation for Command struct.
 impl std::fmt::Debug for Command {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Debug:: {}, {}\n", self.name, self.description)
+        write!(f, "Debug:: {}, {}", self.name, self.description)
     }
 }
 
@@ -95,7 +94,7 @@ impl Command {
                         ))
                     }
                 } else {
-                    Some(format!("Empty path. check /h for help"))
+                    Some("Empty path. check /h for help".to_owned())
                 }
             },
         }
@@ -108,12 +107,12 @@ impl Command {
                 "Unlocks the currently selected encrypted password db with a username and password",
             action: |c, _| {
                 _unlock(c);
-                return Some("".to_string());
+                Some("".to_string())
             },
         }
     }
 
-    pub(crate) fn get_command() -> Self{
+    pub(crate) fn get_command() -> Self {
         Command {
             name: "/get",
             description: "Gets the specified key from the encrypted database. Eg: /get server_password. Displays a key error if the key is not present",
@@ -122,21 +121,15 @@ impl Command {
                     if PBKDF2_HASH.read().unwrap().len() == 0 || AES_IV.read().unwrap().len() == 0 {
                         return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
                     }
-                    match crate::crypt::Data::get_key(p[0].trim().to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), &AES_IV.read().unwrap().to_vec(), c) {
-                        Ok(a) => return {
-                            Some(a)
-                        },
-                        Err(_) => return Some(format!("Key not found...")),
-                    };
-
+                    crate::crypt::Data::get_key(p[0].trim().to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), &AES_IV.read().unwrap().to_vec(), c).ok()
                 } else {
-                    Some(format!("You didn't give a key name. Check /h for usage."))
+                    Some("You didn't give a key name. Check /h for usage.".to_owned())
                 }
             },
         }
     }
 
-    pub(crate) fn put_command() -> Self{
+    pub(crate) fn put_command() -> Self {
         Command {
             name: "/put",
             description: "Put a specified password into encrypted database. Eg: /put server_password 98hy54@1!55. 
@@ -149,35 +142,34 @@ impl Command {
                     if PBKDF2_HASH.read().unwrap().len() == 0 || AES_IV.read().unwrap().len() == 0 {
                         return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
                     }
-                    match crate::crypt::Data::put_key(p[0].trim().to_string(), p[1].trim().to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), &AES_IV.read().unwrap().to_vec(), c) {
-                        Ok(a) => {
-                            return Some(a)
-                        },
-                        Err(_) => return Some(format!("Key not found.")),
-                    };
-
+                    crate::crypt::Data::put_key(p[0].trim().to_string(), p[1].trim().to_string(), &PBKDF2_HASH.read().unwrap().to_vec(), &AES_IV.read().unwrap().to_vec(), c).ok()
                 }else {
-                    Some(format!("You didn't give a key name. Check /h for usage."))
+                    Some("You didn't give a key name. Check /h for usage.".to_owned())
                 }
-                
             },
         }
     }
 
-    pub(crate) fn dump_all_command() -> Self{
+    pub(crate) fn dump_all_command() -> Self {
         Command {
             name: "/dumpall",
             description: "Dump all the contents in the password db including the metadata",
             action: |c, _| {
                 if PBKDF2_HASH.read().unwrap().len() == 0 || AES_IV.read().unwrap().len() == 0 {
-                    return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
-                    }
-                    return Some(match crate::crypt::Data::get_all(&PBKDF2_HASH.read().unwrap().to_vec(), &AES_IV.read().unwrap().to_vec(), c) {
+                    return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile));
+                }
+                return Some(
+                    match crate::crypt::Data::get_all(
+                        &PBKDF2_HASH.read().unwrap().to_vec(),
+                        &AES_IV.read().unwrap().to_vec(),
+                        c,
+                    ) {
                         Ok(a) => a,
                         Err(e) => format!("Error getting dump. Error: {:?}", e),
-                    })
-                }
-            }    
+                    },
+                );
+            },
+        }
     }
 
     pub(crate) fn dump_only_keys_command() -> Self {
@@ -186,13 +178,18 @@ impl Command {
             description: "Dump only the keys, and not the associated passwords.",
             action: |c, _| {
                 if PBKDF2_HASH.read().unwrap().len() == 0 || AES_IV.read().unwrap().len() == 0 {
-                    return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile))
-                    }
-                    return Some(match crate::crypt::Data::get_all_keys(&PBKDF2_HASH.read().unwrap().to_vec(), &AES_IV.read().unwrap().to_vec(), c) {
+                    return Some(format!("DB {:?} is not unlocked. Use /unlock command to unlock the selected db. Check /h for more.", c.datafile));
+                }
+                return Some(
+                    match crate::crypt::Data::get_all_keys(
+                        &PBKDF2_HASH.read().unwrap().to_vec(),
+                        &AES_IV.read().unwrap().to_vec(),
+                        c,
+                    ) {
                         Ok(a) => a,
                         Err(e) => format!("Error getting all keys. Error: {:?}", e),
-                    });
-                    
+                    },
+                );
             },
         }
     }
@@ -200,9 +197,8 @@ impl Command {
 
 fn _unlock(c: &Config) {
     PBKDF2_HASH.write().unwrap().clear();
-    let mut creds: crate::crypt::Creds;
 
-    creds = crate::crypt::Creds::ask_username_and_password(false);
+    let mut creds = crate::crypt::Creds::ask_username_and_password(false);
     creds.generate_pbkdf2();
     let mut tmp_rwlock = PBKDF2_HASH.write().unwrap();
     tmp_rwlock.append(&mut creds.pbkdf2_hash);
@@ -215,7 +211,7 @@ fn _unlock(c: &Config) {
     let mut data = crate::crypt::Data::new();
     let hash = &PBKDF2_HASH.read().unwrap().to_vec();
     let iv = &AES_IV.read().unwrap().to_vec();
-    if match data.check_decryption_file(&hash, &iv, c) {
+    if match data.check_decryption_file(hash, iv, c) {
         Ok(a) => a,
         Err(err) => {
             println!("Unlocking and deserialising failed with error:\n{:?}. 
@@ -227,8 +223,8 @@ The technical difficulty makes it impossible for pwb to find which version
 of the program was used to encrypt this file. If the config file is not replaced by you, 
 check the {:?} file to see the version, and download that release. Check help to see the github page to
 find the releases.", err, &c.conffile);
-        AES_IV.write().unwrap().clear();
-        PBKDF2_HASH.write().unwrap().clear();
+            AES_IV.write().unwrap().clear();
+            PBKDF2_HASH.write().unwrap().clear();
 
             return;
         }
@@ -251,7 +247,6 @@ pub(crate) fn build_all_commands() {
     tmp_rwlock.push(Command::put_command());
     tmp_rwlock.push(Command::dump_all_command());
     tmp_rwlock.push(Command::dump_only_keys_command());
-
 
     // use this only at the last so that the commands are populated into the lazy_static.
     tmp_rwlock.push(Command::help_command());

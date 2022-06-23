@@ -46,7 +46,9 @@ This is a personal tool written as a part of a personal project to learn and exp
 - perl
 - make
 
-because the `vendored` cargo feature in the dependent [openssl](https://docs.rs/openssl/0.10.30/openssl/) crate is enabled.
+~~because the `vendored` cargo feature in the dependent [openssl](https://docs.rs/openssl/0.10.30/openssl/) crate is enabled.~~
+
+No more using vendored because of security vulnerability. 
 
 Quoting from the crate documentation:
 

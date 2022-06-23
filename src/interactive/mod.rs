@@ -1,3 +1,3 @@
-pub mod shell;
-mod prompt;
 mod commands;
+mod prompt;
+pub mod shell;
